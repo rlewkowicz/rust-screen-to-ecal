@@ -1,0 +1,11 @@
+syntax = "proto3";
+package ecal_rs;
+
+message Frame {
+  uint32 width = 1;
+  uint32 height = 2;
+  uint32 row_pitch = 3;
+  uint32 depth_pitch = 4;
+  bytes pixel_data = 5;
+}
+

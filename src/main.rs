@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 use windows_capture::{
     capture::WindowsCaptureHandler,
     frame::Frame,
@@ -6,8 +9,23 @@ use windows_capture::{
     monitor::Monitor,
 };
 
-// Struct To Implement The Trait For
+use anyhow::Result;
+
+mod ecal_rs;
+
+use ecal::format::prost::Prost;
+
+type Publisher<T> = ecal::prost::Publisher<T>;
+
+lazy_static! {
+    static ref PUB: ecal::Publisher<ecal_rs::Frame, Prost<ecal_rs::Frame>> = {
+        let mut publisher = Publisher::<ecal_rs::Frame>::new("/frame").unwrap();
+        publisher
+    };
+}
+
 struct Capture;
+
 
 impl WindowsCaptureHandler for Capture {
     // To Get The Message From The Settings
@@ -30,13 +48,17 @@ impl WindowsCaptureHandler for Capture {
         frame: &mut Frame,
         capture_control: InternalCaptureControl,
     ) -> Result<(), Self::Error> {
-        println!("New Frame Arrived");
 
-        // Save The Frame As An Image To The Specified Path
-        frame.save_as_image("image.png")?;
+        let mut fb = frame.buffer()?;
 
-        // Gracefully Stop The Capture Thread
-        capture_control.stop();
+        let mut screen = ecal_rs::Frame { height: fb.height(), 
+                                          width: fb.width(),
+                                          row_pitch: fb.row_pitch(),
+                                          depth_pitch: fb.depth_pitch(),
+                                          pixel_data: fb.as_raw_nopadding_buffer().unwrap().to_vec()
+                                        };
+
+        PUB.send(&screen)?;
 
         Ok(())
     }
@@ -51,6 +73,9 @@ impl WindowsCaptureHandler for Capture {
 }
 
 fn main() {
+
+    let _cal = ecal::Cal::new("frame");
+
     // Checkout Docs For Other Capture Items
     let foreground_window = Monitor::primary().expect("No Active Window Found");
 
@@ -58,9 +83,9 @@ fn main() {
         // Item To Captue
         foreground_window,
         // Capture Cursor
-        Some(true),
+        Some(false),
         // Draw Borders (None Means Default Api Configuration)
-        None,
+        Some(false),
         // Kind Of Pixel Format For Frame To Have
         ColorFormat::Rgba8,
         // Will Be Passed To The New Function
